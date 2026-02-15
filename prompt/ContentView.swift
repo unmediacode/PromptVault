@@ -43,6 +43,7 @@ struct ContentView: View {
                     viewModel: promptVM,
                     categoryVM: categoryVM
                 )
+                .id(prompt.objectID)
                 .frame(minWidth: 350)
             } else {
                 PromptDetailEmptyView()
@@ -69,6 +70,9 @@ struct ContentView: View {
     }
 
     private func createNewPrompt() {
+        // Save pending in-memory changes before creating new prompt
+        promptVM.save()
+
         var category: CategoryEntity?
         if case .category(let cat) = selectedFilter {
             category = cat

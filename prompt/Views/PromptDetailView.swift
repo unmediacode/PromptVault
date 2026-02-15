@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 struct PromptDetailView: View {
     @ObservedObject var prompt: PromptEntity
@@ -10,10 +9,6 @@ struct PromptDetailView: View {
     @State private var titleText: String = ""
     @State private var contentText: String = ""
     @State private var showCopied: Bool = false
-    @State private var titleSubject = PassthroughSubject<String, Never>()
-    @State private var contentSubject = PassthroughSubject<String, Never>()
-    @State private var cancellables = Set<AnyCancellable>()
-    @State private var editingObjectID: NSManagedObjectID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -23,9 +18,6 @@ struct PromptDetailView: View {
                     .textFieldStyle(.plain)
                     .font(.title2.bold())
                     .accessibilityLabel("Prompt title")
-                    .onChange(of: titleText) { _, newValue in
-                        titleSubject.send(newValue)
-                    }
 
                 Spacer()
 
@@ -82,9 +74,6 @@ struct PromptDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
                 .accessibilityLabel("Prompt content")
-                .onChange(of: contentText) { _, newValue in
-                    contentSubject.send(newValue)
-                }
 
             Divider()
 
@@ -131,60 +120,21 @@ struct PromptDetailView: View {
             }
         }
         .onAppear {
-            editingObjectID = prompt.objectID
             titleText = prompt.title
             contentText = prompt.content
-            setupDebounce()
         }
-        .onChange(of: prompt.objectID) { oldID, _ in
-            // Save pending changes to the PREVIOUS prompt
-            saveTo(objectID: oldID)
-
-            // Load the new prompt
-            editingObjectID = prompt.objectID
-            titleText = prompt.title
-            contentText = prompt.content
-            setupDebounce()
-        }
-        .onDisappear {
-            if let oid = editingObjectID {
-                saveTo(objectID: oid)
+        .onChange(of: titleText) { _, newValue in
+            if prompt.title_ != newValue {
+                prompt.title_ = newValue
+                prompt.updatedAt_ = Date()
             }
         }
-    }
-
-    private func setupDebounce() {
-        cancellables.removeAll()
-
-        titleSubject
-            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
-            .sink { newTitle in
-                guard prompt.objectID == editingObjectID else { return }
-                prompt.title = newTitle
-                viewModel.save()
+        .onChange(of: contentText) { _, newValue in
+            if prompt.content_ != newValue {
+                prompt.content_ = newValue
+                prompt.updatedAt_ = Date()
             }
-            .store(in: &cancellables)
-
-        contentSubject
-            .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
-            .sink { newContent in
-                guard prompt.objectID == editingObjectID else { return }
-                prompt.content = newContent
-                viewModel.save()
-            }
-            .store(in: &cancellables)
-    }
-
-    private func saveTo(objectID: NSManagedObjectID) {
-        guard let obj = try? viewContext.existingObject(with: objectID) as? PromptEntity,
-              !obj.isDeleted else { return }
-        if obj.title != titleText {
-            obj.title = titleText
         }
-        if obj.content != contentText {
-            obj.content = contentText
-        }
-        viewModel.save()
     }
 }
 
