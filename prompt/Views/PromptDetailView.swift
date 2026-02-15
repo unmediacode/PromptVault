@@ -4,17 +4,34 @@ struct PromptDetailView: View {
     @ObservedObject var prompt: PromptEntity
     @ObservedObject var viewModel: PromptListViewModel
     @ObservedObject var categoryVM: CategoryViewModel
-    @Environment(\.managedObjectContext) private var viewContext
 
-    @State private var titleText: String = ""
-    @State private var contentText: String = ""
     @State private var showCopied: Bool = false
+
+    private var titleBinding: Binding<String> {
+        Binding(
+            get: { prompt.title },
+            set: {
+                prompt.title_ = $0
+                prompt.updatedAt_ = Date()
+            }
+        )
+    }
+
+    private var contentBinding: Binding<String> {
+        Binding(
+            get: { prompt.content },
+            set: {
+                prompt.content_ = $0
+                prompt.updatedAt_ = Date()
+            }
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                TextField("Prompt Title", text: $titleText)
+                TextField("Prompt Title", text: titleBinding)
                     .textFieldStyle(.plain)
                     .font(.title2.bold())
                     .accessibilityLabel("Prompt title")
@@ -68,7 +85,7 @@ struct PromptDetailView: View {
                 .padding(.top, 8)
 
             // Content editor
-            TextEditor(text: $contentText)
+            TextEditor(text: contentBinding)
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 12)
@@ -79,14 +96,14 @@ struct PromptDetailView: View {
 
             // Bottom toolbar
             HStack {
-                Text("\(contentText.count) characters")
+                Text("\(prompt.content.count) characters")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
                 Spacer()
 
                 Button {
-                    ClipboardManager.copyToClipboard(contentText)
+                    ClipboardManager.copyToClipboard(prompt.content)
                     withAnimation {
                         showCopied = true
                     }
@@ -117,22 +134,6 @@ struct PromptDetailView: View {
                     .clipShape(Capsule())
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .padding(.top, 4)
-            }
-        }
-        .onAppear {
-            titleText = prompt.title
-            contentText = prompt.content
-        }
-        .onChange(of: titleText) { _, newValue in
-            if prompt.title_ != newValue {
-                prompt.title_ = newValue
-                prompt.updatedAt_ = Date()
-            }
-        }
-        .onChange(of: contentText) { _, newValue in
-            if prompt.content_ != newValue {
-                prompt.content_ = newValue
-                prompt.updatedAt_ = Date()
             }
         }
     }
