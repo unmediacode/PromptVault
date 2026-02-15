@@ -1,39 +1,17 @@
 import SwiftUI
 
 struct PromptDetailView: View {
-    @ObservedObject var prompt: PromptEntity
+    @ObservedObject var editor: PromptEditor
     @ObservedObject var viewModel: PromptListViewModel
     @ObservedObject var categoryVM: CategoryViewModel
 
     @State private var showCopied: Bool = false
 
-    private var titleBinding: Binding<String> {
-        Binding(
-            get: { prompt.title },
-            set: { newValue in
-                prompt.title_ = newValue
-                prompt.updatedAt_ = Date()
-                viewModel.save()
-            }
-        )
-    }
-
-    private var contentBinding: Binding<String> {
-        Binding(
-            get: { prompt.content },
-            set: { newValue in
-                prompt.content_ = newValue
-                prompt.updatedAt_ = Date()
-                viewModel.save()
-            }
-        )
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                TextField("Prompt Title", text: titleBinding)
+                TextField("Prompt Title", text: $editor.title)
                     .textFieldStyle(.plain)
                     .font(.title2.bold())
                     .accessibilityLabel("Prompt title")
@@ -41,27 +19,22 @@ struct PromptDetailView: View {
                 Spacer()
 
                 Button {
-                    viewModel.toggleFavorite(prompt)
+                    editor.isFavorite.toggle()
+                    editor.saveCurrentPrompt()
                 } label: {
-                    Image(systemName: prompt.isFavorite ? "star.fill" : "star")
-                        .foregroundStyle(prompt.isFavorite ? .yellow : .secondary)
+                    Image(systemName: editor.isFavorite ? "star.fill" : "star")
+                        .foregroundStyle(editor.isFavorite ? .yellow : .secondary)
                         .font(.title3)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(prompt.isFavorite ? "Remove from favorites" : "Add to favorites")
+                .accessibilityLabel(editor.isFavorite ? "Remove from favorites" : "Add to favorites")
             }
             .padding(.horizontal)
             .padding(.top, 12)
 
             // Metadata row
             HStack(spacing: 12) {
-                Picker("Category", selection: Binding(
-                    get: { prompt.category },
-                    set: { newCat in
-                        viewModel.movePrompt(prompt, to: newCat)
-                        categoryVM.fetchCategories()
-                    }
-                )) {
+                Picker("Category", selection: $editor.category) {
                     Text("Uncategorized").tag(nil as CategoryEntity?)
                     ForEach(categoryVM.categories, id: \.objectID) { cat in
                         Label(cat.name, systemImage: cat.icon).tag(cat as CategoryEntity?)
@@ -69,14 +42,18 @@ struct PromptDetailView: View {
                 }
                 .frame(maxWidth: 200)
                 .accessibilityLabel("Category picker")
+                .onChange(of: editor.category) { _, _ in
+                    editor.saveCurrentPrompt()
+                    categoryVM.fetchCategories()
+                }
 
                 Spacer()
 
-                Text("Created \(prompt.createdAt.shortFormatted)")
+                Text("Created \(editor.createdAt.shortFormatted)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
-                Text("Updated \(prompt.updatedAt.relativeFormatted)")
+                Text("Updated \(editor.updatedAt.relativeFormatted)")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -87,7 +64,7 @@ struct PromptDetailView: View {
                 .padding(.top, 8)
 
             // Content editor
-            TextEditor(text: contentBinding)
+            TextEditor(text: $editor.content)
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 12)
@@ -98,14 +75,14 @@ struct PromptDetailView: View {
 
             // Bottom toolbar
             HStack {
-                Text("\(prompt.content.count) characters")
+                Text("\(editor.content.count) characters")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
 
                 Spacer()
 
                 Button {
-                    ClipboardManager.copyToClipboard(prompt.content)
+                    ClipboardManager.copyToClipboard(editor.content)
                     withAnimation {
                         showCopied = true
                     }
@@ -138,6 +115,9 @@ struct PromptDetailView: View {
                     .padding(.top, 4)
             }
         }
+        .onDisappear {
+            editor.saveCurrentPrompt()
+        }
     }
 }
 
@@ -164,8 +144,10 @@ struct PromptDetailEmptyView: View {
     let context = controller.container.viewContext
     let request = NSFetchRequest<PromptEntity>(entityName: "PromptEntity")
     let prompts = try! context.fetch(request)
+    let editor = PromptEditor()
+    editor.load(prompts.first!, context: context)
     return PromptDetailView(
-        prompt: prompts.first!,
+        editor: editor,
         viewModel: PromptListViewModel(context: context),
         categoryVM: CategoryViewModel(context: context)
     )

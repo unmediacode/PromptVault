@@ -5,9 +5,14 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var promptVM: PromptListViewModel
     @StateObject private var categoryVM: CategoryViewModel
+    @StateObject private var editor = PromptEditor()
     @State private var selectedFilter: SidebarFilter? = .all
-    @State private var selectedPrompt: PromptEntity?
+    @State private var selectedPrompts: Set<PromptEntity> = []
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    
+    private var selectedPrompt: PromptEntity? {
+        selectedPrompts.first
+    }
 
     init(context: NSManagedObjectContext) {
         _promptVM = StateObject(wrappedValue: PromptListViewModel(context: context))
@@ -26,7 +31,7 @@ struct ContentView: View {
                 PromptListView(
                     viewModel: promptVM,
                     categoryVM: categoryVM,
-                    selectedPrompt: $selectedPrompt,
+                    selectedPrompts: $selectedPrompts,
                     filter: filter
                 )
                 .frame(minWidth: 250)
@@ -37,19 +42,29 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         } detail: {
-            if let prompt = selectedPrompt {
+            if selectedPrompt != nil {
                 PromptDetailView(
-                    prompt: prompt,
+                    editor: editor,
                     viewModel: promptVM,
                     categoryVM: categoryVM
                 )
-                .id(prompt.objectID)
                 .frame(minWidth: 350)
             } else {
                 PromptDetailEmptyView()
             }
         }
         .frame(minWidth: 800, minHeight: 500)
+        .onDeleteCommand {
+            deleteSelectedPrompts()
+        }
+        .onChange(of: selectedPrompt?.objectID) { _, newValue in
+            if let newValue,
+               let prompt = try? viewContext.existingObject(with: newValue) as? PromptEntity {
+                editor.load(prompt, context: viewContext)
+            } else {
+                editor.clear()
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: .createNewPrompt)) { _ in
             createNewPrompt()
         }
@@ -59,26 +74,38 @@ struct ContentView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .deleteSelectedPrompt)) { _ in
-            if let prompt = selectedPrompt {
-                selectedPrompt = nil
-                promptVM.deletePrompt(prompt)
-            }
+            deleteSelectedPrompts()
         }
         .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
             // .searchable handles ⌘F natively
         }
     }
+    
+    private func deleteSelectedPrompts() {
+        guard !selectedPrompts.isEmpty else { return }
+        
+        // If we're deleting the currently edited prompt, clear the editor
+        if let currentPrompt = selectedPrompt, selectedPrompts.contains(currentPrompt) {
+            editor.clear(saveFirst: false)
+        }
+        
+        // Delete all selected prompts
+        for prompt in selectedPrompts {
+            promptVM.deletePrompt(prompt)
+        }
+        
+        // Clear selection
+        selectedPrompts.removeAll()
+    }
 
     private func createNewPrompt() {
-        // Save pending in-memory changes before creating new prompt
-        promptVM.save()
-
+        // The editor will save the current prompt automatically when loading the new one
         var category: CategoryEntity?
-        if case .category(let cat) = selectedFilter {
-            category = cat
+        if case .category(let categoryID) = selectedFilter {
+            category = try? viewContext.existingObject(with: categoryID) as? CategoryEntity
         }
         let newPrompt = promptVM.addPrompt(category: category)
-        selectedPrompt = newPrompt
+        selectedPrompts = [newPrompt]
     }
 }
 

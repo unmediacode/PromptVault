@@ -5,18 +5,29 @@ struct PromptListView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @ObservedObject var viewModel: PromptListViewModel
     @ObservedObject var categoryVM: CategoryViewModel
-    @Binding var selectedPrompt: PromptEntity?
+    @Binding var selectedPrompts: Set<PromptEntity>
     var filter: SidebarFilter
 
     @State private var prompts: [PromptEntity] = []
     @State private var promptToDelete: PromptEntity?
+    
+    private var navigationTitle: String {
+        switch filter {
+        case .all: return "All Prompts"
+        case .favorites: return "Favorites"
+        case .recent: return "Recent"
+        case .category(let categoryID):
+            if let category = try? viewContext.existingObject(with: categoryID) as? CategoryEntity {
+                return category.name
+            }
+            return "Category"
+        }
+    }
 
     private var filteredPrompts: [PromptEntity] {
         var result = prompts
 
         switch viewModel.sortOption {
-        case .dateUpdated:
-            result.sort { $0.updatedAt > $1.updatedAt }
         case .dateCreated:
             result.sort { $0.createdAt > $1.createdAt }
         case .titleAZ:
@@ -38,10 +49,11 @@ struct PromptListView: View {
             if filteredPrompts.isEmpty {
                 emptyState
             } else {
-                List(selection: $selectedPrompt) {
+                List(selection: $selectedPrompts) {
                     ForEach(filteredPrompts, id: \.objectID) { prompt in
                         PromptRowView(prompt: prompt)
                             .tag(prompt)
+                            .id(prompt.updatedAt_)  // Re-render when updated
                             .contextMenu {
                                 contextMenuItems(for: prompt)
                             }
@@ -79,23 +91,24 @@ struct PromptListView: View {
             Button("Cancel", role: .cancel) { promptToDelete = nil }
             Button("Delete", role: .destructive) {
                 if let prompt = promptToDelete {
-                    if selectedPrompt == prompt { selectedPrompt = nil }
+                    if selectedPrompts.contains(prompt) { 
+                        selectedPrompts.remove(prompt)
+                    }
                     viewModel.deletePrompt(prompt)
+                    promptToDelete = nil
                 }
-                promptToDelete = nil
             }
         } message: {
             Text("This action cannot be undone.")
         }
-        .navigationTitle(filter.label)
+        .navigationTitle(navigationTitle)
         .onAppear { fetchPrompts() }
-        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
-            let userInfo = notification.userInfo ?? [:]
-            let inserts = userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject> ?? []
-            let deletes = userInfo[NSDeletedObjectsKey] as? Set<NSManagedObject> ?? []
-            if !inserts.isEmpty || !deletes.isEmpty {
-                fetchPrompts()
-            }
+        .onChange(of: filter) { _, _ in
+            fetchPrompts()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
+            // Refetch prompts whenever Core Data changes
+            fetchPrompts()
         }
     }
 
@@ -111,8 +124,12 @@ struct PromptListView: View {
         case .recent:
             let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
             request.predicate = NSPredicate(format: "updatedAt_ >= %@", weekAgo as NSDate)
-        case .category(let category):
-            request.predicate = NSPredicate(format: "category == %@", category)
+        case .category(let categoryID):
+            if let category = try? viewContext.existingObject(with: categoryID) as? CategoryEntity {
+                request.predicate = NSPredicate(format: "category == %@", category)
+            } else {
+                request.predicate = NSPredicate(value: false) // Return no results
+            }
         }
 
         do {
@@ -132,7 +149,7 @@ struct PromptListView: View {
 
         Button {
             let copy = viewModel.duplicatePrompt(prompt)
-            selectedPrompt = copy
+            selectedPrompts = [copy]
         } label: {
             Label("Duplicate", systemImage: "plus.square.on.square")
         }
@@ -205,7 +222,7 @@ struct PromptListView: View {
     PromptListView(
         viewModel: PromptListViewModel(context: context),
         categoryVM: CategoryViewModel(context: context),
-        selectedPrompt: .constant(nil),
+        selectedPrompts: .constant([]),
         filter: .all
     )
     .environment(\.managedObjectContext, context)

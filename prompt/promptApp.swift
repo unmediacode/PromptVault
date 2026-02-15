@@ -11,7 +11,7 @@ struct promptApp: App {
         }
         .defaultSize(width: 1100, height: 700)
         .commands {
-            CommandGroup(after: .newItem) {
+            CommandGroup(replacing: .newItem) {
                 Button("New Prompt") {
                     NotificationCenter.default.post(name: .createNewPrompt, object: nil)
                 }

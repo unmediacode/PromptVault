@@ -3,7 +3,6 @@ import CoreData
 import Foundation
 
 enum SortOption: String, CaseIterable, Identifiable {
-    case dateUpdated = "Date Updated"
     case dateCreated = "Date Created"
     case titleAZ = "Title A-Z"
     case titleZA = "Title Z-A"
@@ -12,7 +11,6 @@ enum SortOption: String, CaseIterable, Identifiable {
 
     var sortDescriptor: NSSortDescriptor {
         switch self {
-        case .dateUpdated: NSSortDescriptor(key: "updatedAt_", ascending: false)
         case .dateCreated: NSSortDescriptor(key: "createdAt_", ascending: false)
         case .titleAZ: NSSortDescriptor(key: "title_", ascending: true, selector: #selector(NSString.caseInsensitiveCompare(_:)))
         case .titleZA: NSSortDescriptor(key: "title_", ascending: false, selector: #selector(NSString.caseInsensitiveCompare(_:)))
@@ -22,7 +20,7 @@ enum SortOption: String, CaseIterable, Identifiable {
 
 class PromptListViewModel: ObservableObject {
     @Published var searchText: String = ""
-    @Published var sortOption: SortOption = .dateUpdated
+    @Published var sortOption: SortOption = .dateCreated
 
     private let viewContext: NSManagedObjectContext
 

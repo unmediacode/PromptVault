@@ -4,14 +4,14 @@ enum SidebarFilter: Hashable {
     case all
     case favorites
     case recent
-    case category(CategoryEntity)
+    case category(NSManagedObjectID)  // Changed to store only the ID
 
     var label: String {
         switch self {
         case .all: "All Prompts"
         case .favorites: "Favorites"
         case .recent: "Recent"
-        case .category(let cat): cat.name
+        case .category: "Category"  // Will be overridden in the view
         }
     }
 
@@ -20,7 +20,7 @@ enum SidebarFilter: Hashable {
         case .all: "tray.2"
         case .favorites: "star"
         case .recent: "clock"
-        case .category(let cat): cat.icon
+        case .category: "folder"  // Will be overridden in the view
         }
     }
 }
@@ -50,21 +50,33 @@ struct SidebarView: View {
 
             Section {
                 ForEach(categoryVM.categories, id: \.objectID) { category in
-                    Label(category.name, systemImage: category.icon)
-                        .tag(SidebarFilter.category(category))
-                        .badge(category.promptCount)
-                        .contextMenu {
-                            Button("Rename") {
-                                renameText = category.name
-                                renamingCategory = category
-                            }
-                            Button("Delete", role: .destructive) {
-                                categoryVM.deleteCategory(category)
-                                if case .category(let selected) = selectedFilter, selected == category {
-                                    selectedFilter = .all
-                                }
+                    HStack {
+                        Label(category.name, systemImage: category.icon)
+                        Spacer()
+                        if category.promptCount > 0 {
+                            Text("\(category.promptCount)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.quaternary)
+                                .clipShape(Capsule())
+                        }
+                    }
+                    .tag(SidebarFilter.category(category.objectID))
+                    .contextMenu {
+                        Button("Rename") {
+                            renameText = category.name
+                            renamingCategory = category
+                        }
+                        Button("Delete", role: .destructive) {
+                            categoryVM.deleteCategory(category)
+                            if case .category(let selectedID) = selectedFilter,
+                               selectedID == category.objectID {
+                                selectedFilter = .all
                             }
                         }
+                    }
                 }
             } header: {
                 HStack {
