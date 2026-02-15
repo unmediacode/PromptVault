@@ -43,7 +43,6 @@ struct ContentView: View {
                     viewModel: promptVM,
                     categoryVM: categoryVM
                 )
-                .id(prompt.objectID)
                 .frame(minWidth: 350)
             } else {
                 PromptDetailEmptyView()

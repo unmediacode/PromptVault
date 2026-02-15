@@ -13,6 +13,7 @@ struct PromptDetailView: View {
     @State private var titleSubject = PassthroughSubject<String, Never>()
     @State private var contentSubject = PassthroughSubject<String, Never>()
     @State private var cancellables = Set<AnyCancellable>()
+    @State private var editingObjectID: NSManagedObjectID?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -130,17 +131,25 @@ struct PromptDetailView: View {
             }
         }
         .onAppear {
+            editingObjectID = prompt.objectID
             titleText = prompt.title
             contentText = prompt.content
             setupDebounce()
         }
-        .onChange(of: prompt.objectID) { _, _ in
+        .onChange(of: prompt.objectID) { oldID, _ in
+            // Save pending changes to the PREVIOUS prompt
+            saveTo(objectID: oldID)
+
+            // Load the new prompt
+            editingObjectID = prompt.objectID
             titleText = prompt.title
             contentText = prompt.content
             setupDebounce()
         }
         .onDisappear {
-            forceSave()
+            if let oid = editingObjectID {
+                saveTo(objectID: oid)
+            }
         }
     }
 
@@ -150,6 +159,7 @@ struct PromptDetailView: View {
         titleSubject
             .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
             .sink { newTitle in
+                guard prompt.objectID == editingObjectID else { return }
                 prompt.title = newTitle
                 viewModel.save()
             }
@@ -158,18 +168,21 @@ struct PromptDetailView: View {
         contentSubject
             .debounce(for: .milliseconds(500), scheduler: RunLoop.main)
             .sink { newContent in
+                guard prompt.objectID == editingObjectID else { return }
                 prompt.content = newContent
                 viewModel.save()
             }
             .store(in: &cancellables)
     }
 
-    private func forceSave() {
-        if prompt.title != titleText {
-            prompt.title = titleText
+    private func saveTo(objectID: NSManagedObjectID) {
+        guard let obj = try? viewContext.existingObject(with: objectID) as? PromptEntity,
+              !obj.isDeleted else { return }
+        if obj.title != titleText {
+            obj.title = titleText
         }
-        if prompt.content != contentText {
-            prompt.content = contentText
+        if obj.content != contentText {
+            obj.content = contentText
         }
         viewModel.save()
     }
