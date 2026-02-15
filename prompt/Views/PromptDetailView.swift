@@ -10,9 +10,10 @@ struct PromptDetailView: View {
     private var titleBinding: Binding<String> {
         Binding(
             get: { prompt.title },
-            set: {
-                prompt.title_ = $0
+            set: { newValue in
+                prompt.title_ = newValue
                 prompt.updatedAt_ = Date()
+                viewModel.save()
             }
         )
     }
@@ -20,9 +21,10 @@ struct PromptDetailView: View {
     private var contentBinding: Binding<String> {
         Binding(
             get: { prompt.content },
-            set: {
-                prompt.content_ = $0
+            set: { newValue in
+                prompt.content_ = newValue
                 prompt.updatedAt_ = Date()
+                viewModel.save()
             }
         )
     }

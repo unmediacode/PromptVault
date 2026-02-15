@@ -89,8 +89,13 @@ struct PromptListView: View {
         }
         .navigationTitle(filter.label)
         .onAppear { fetchPrompts() }
-        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { _ in
-            fetchPrompts()
+        .onReceive(NotificationCenter.default.publisher(for: .NSManagedObjectContextObjectsDidChange, object: viewContext)) { notification in
+            let userInfo = notification.userInfo ?? [:]
+            let inserts = userInfo[NSInsertedObjectsKey] as? Set<NSManagedObject> ?? []
+            let deletes = userInfo[NSDeletedObjectsKey] as? Set<NSManagedObject> ?? []
+            if !inserts.isEmpty || !deletes.isEmpty {
+                fetchPrompts()
+            }
         }
     }
 
